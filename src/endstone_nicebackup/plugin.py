@@ -12,7 +12,7 @@ from endstone.scheduler import Task
 from endstone.plugin import Plugin
 from endstone.command import Command, CommandSender
 
-from .utilities import copy_backup, del_folder
+from .utilities import copy_backup, zip_backup
 from .options import PluginOptions
 from .retention import RetentionManager
 from .commands import CommandBuilder, CommandResult
@@ -125,7 +125,7 @@ class NiceBackup(Plugin):
             cron = croniter(self.options.schedule, datetime.datetime.now())
             self.next_backup = cron.get_next(datetime.datetime)
             self.logger.info(
-                f"Next backup scheduled: {self.next_backup.strftime('%Y-%m-%d %H:%M:%S')}"
+                f"Next backup: {self.next_backup.strftime('%Y-%m-%d %H:%M:%S')}"
             )
 
     def create_backup(self, sender: CommandSender) -> bool:
@@ -153,48 +153,68 @@ class NiceBackup(Plugin):
 
         def get_status_task() -> None:
             try:
-                if self.get_status(server) == QueryStatus.COMPLETE:
+                if self.get_status() == QueryStatus.COMPLETE:
                     self.cancel_task("get_status")
-
-                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    file_name = self.options.filename.format(
-                        level_name=self.level_name, timestamp=timestamp
-                    )
-
-                    output_path = self.options.output + "/" + file_name
-                    output_path_tmp = self.options.output_tmp + "/" + file_name
-
-                    copy_backup(self.world_path, output_path_tmp, self.file_sizes)
-
-                    self.save_resume(server)
-                    self.save_backup(output_path_tmp, output_path)
-
-                    del_folder(self.options.output_tmp)
-
+                    self.write_backup()
+                    self.save_resume()
                     self.retention.clean_backups(self.logger)
                 elif datetime.datetime.now() > timeout:
                     raise Exception(
-                        f"Failed to complete backup within the timeout period ({self.options.timeout} seconds)."
+                        f"Failed to prepare server for backup within the timeout period ({self.options.timeout} seconds)."
                     )
             except Exception as e:
                 self.logger.error(str(e))
-                
+
                 self.cancel_task("get_status")
-                self.save_resume(server)
-                
-                del_folder(self.options.output_tmp)
+                self.save_resume()
 
         self.run_task(
             "get_status",
             get_status_task,
-            int(self.server.current_tps),
+            0,
             int(self.server.current_tps),
         )
 
         return True
 
-    def get_status(self, server: Server) -> QueryStatus:
-        result = self.execute_command(server.command_sender, "save query")
+    def write_backup(self) -> None:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = self.options.filename.format(
+            level_name=self.level_name, timestamp=timestamp
+        )
+
+        output_path = os.path.join(self.options.output, file_name)
+        output_path_tmp = (
+            os.path.join(self.options.output_tmp, file_name)
+            if self.options.output_tmp
+            else output_path
+        )
+
+        try:
+            if self.options.compress:
+                output_path += self.options.extension
+                output_path_tmp += self.options.extension
+
+                zip_backup(self.world_path, output_path_tmp, self.file_sizes)
+            else:
+                copy_backup(self.world_path, output_path_tmp, self.file_sizes)
+
+            if output_path_tmp != output_path:
+                shutil.move(output_path_tmp, output_path)
+
+            self.logger.info(f"Backup saved: {output_path}")
+        except Exception as e:
+            if os.path.exists(output_path):
+                if os.path.isdir(output_path):
+                    shutil.rmtree(output_path, True)
+                else:
+                    os.remove(output_path)
+            raise e
+        finally:
+            self.del_tmp_dir()
+
+    def get_status(self) -> QueryStatus:
+        result = self.execute_command(self.server.command_sender, "save query")
 
         if result.has_error:
             if "commands.save-on.notDone" in result.errors[0].text:
@@ -211,8 +231,8 @@ class NiceBackup(Plugin):
 
         return QueryStatus.RUNNING
 
-    def save_resume(self, server: Server) -> None:
-        result = self.execute_command(server.command_sender, "save resume")
+    def save_resume(self) -> None:
+        result = self.execute_command(self.server.command_sender, "save resume")
 
         if result.has_error:
             self.logger.error(f"Failed to execute command: {result.command_line}")
@@ -226,18 +246,6 @@ class NiceBackup(Plugin):
 
     def clear_file_sizes(self) -> None:
         self.file_sizes = {}
-
-    def save_backup(self, path_tmp: str, path: str) -> None:
-        message = f"Backup saved to: {path}"
-
-        if self.options.compress:
-            shutil.make_archive(path, "zip", path_tmp)
-            os.rename(path + ".zip", path + self.options.extension)
-            message += self.options.extension
-        else:
-            shutil.move(path_tmp, path)
-
-        self.logger.info(message)
 
     def get_level_name(self) -> str:
         with open("./server.properties", "r") as file:
@@ -272,3 +280,7 @@ class NiceBackup(Plugin):
         if task_name in self.tasks:
             self.tasks[task_name].cancel()
             del self.tasks[task_name]
+
+    def del_tmp_dir(self) -> None:
+        if self.options.output_tmp != self.options.output:
+            shutil.rmtree(self.options.output_tmp, True)

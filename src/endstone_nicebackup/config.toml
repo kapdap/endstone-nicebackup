@@ -1,10 +1,10 @@
 # Nice Backup Configuration File
 #
 # output: Directory where backups will be stored (default: "./backups")
-# output_tmp: Temporary directory for backup processing (default: "./backups/.tmp")
+# output_tmp: Temporary directory for backup processing. Set to empty string to disable (default: "./backups/.tmp")
 # filename: Template for naming backup files (only level_name and timestamp tokens are supported) (default: "{level_name}_{timestamp}")
 # extension: File extension for backup files when compression is enabled (default: ".mcworld")
-#            Renaming .zip to .mcworld for allows easy importing into Minecraft
+#            Renaming .zip to .mcworld for allows easy importing into Minecraft clients
 # compress: Set to false to disable compression (default: true)
 # schedule: Cron expression for backup scheduling (default: "0 3 * * *" for daily at 3 AM)
 # timeout: Maximum time in seconds to wait for a backup to complete (default: 60)

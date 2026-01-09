@@ -88,9 +88,8 @@ Nice Backup utilizes the `save hold`, `save query`, and `save resume` ([minecraf
 
 1. When a backup is initiated, the plugin sends the `save hold` command. This flushes all pending data to disk and places the server in a state ready for backup.
 2. The `save query` command is polled until the server confirms the data is ready. On success, it returns a list of files and the exact size in bytes to be copied for each one.
-3. All world files are copied to the `backups/.tmp` directory; if a file exists in the list from the previous step, the plugin only copies the specified bytes to ensure data consistency.
+3. All world file data is copied directly to a zip archive (or a folder if compression is disabled); if a file exists in the list from the previous step, the plugin only copies the specified bytes to ensure data consistency.
 4. The `save resume` command is sent to the server to resume normal operations.
-5. The temporary directory is compressed (zipped) into a **.mcworld** file and saved to the `backups` directory.
 
 All files under the world directory are backed up, including resource packs, behavior packs, and other files not included in the `save query` file list.
 
@@ -108,11 +107,17 @@ For larger worlds, backups may take longer than the default timeout period (60 s
 >
 > This plugin has not been extensively tested with very large worlds (multiple GBs). Any issues or feedback are appreciated.
 
+## TODO
+
+- Check for sufficient disk space before starting a backup.
+- Notify players in-game when a backup has started/completed with a configurable message.
+- Add command to reload configuration without restarting the server.
+- Add command to stop/start scheduled backups.
+
 ## Ideas
 
 Some potential features for future releases:
 
-- Notify players in-game when a backup is starting/completing with a configurable message.
 - External notifications (e.g., Discord, email) on backup success/failure.
 - Support for cloud storage (e.g., AWS S3, Google Drive).
 
