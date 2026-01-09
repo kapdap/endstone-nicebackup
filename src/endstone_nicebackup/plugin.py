@@ -113,9 +113,6 @@ class NiceBackup(Plugin):
             if self.next_backup and datetime.datetime.now() >= self.next_backup:
                 self.create_backup(self.server.command_sender)
                 self.update_next_backup()
-                self.logger.info(
-                    f"Next backup scheduled: {self.next_backup.strftime('%Y-%m-%d %H:%M:%S')}"
-                )
 
         self.run_task("schedule", schedule_backup_task, 0, int(self.server.current_tps))
 
@@ -127,6 +124,9 @@ class NiceBackup(Plugin):
         if self.options.schedule != "":
             cron = croniter(self.options.schedule, datetime.datetime.now())
             self.next_backup = cron.get_next(datetime.datetime)
+            self.logger.info(
+                f"Next backup scheduled: {self.next_backup.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
 
     def create_backup(self, sender: CommandSender) -> bool:
         self.logger.info("Creating world backup...")
