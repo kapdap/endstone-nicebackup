@@ -29,6 +29,7 @@ class PluginOptions:
     extension: str = ".mcworld"
     compress: bool = True
     schedule: str = ""
+    enabled: bool = True
     timeout: int = 60  # seconds
     worlds_path: str = "./worlds"
     retention: RetentionPolicy = field(default_factory=RetentionPolicy)

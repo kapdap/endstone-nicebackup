@@ -36,7 +36,10 @@ class NiceBackup(Plugin):
     commands = {
         "nice_backup": {
             "description": "Create a backup of the current world.",
-            "usages": ["/nice_backup"],
+            "usages": [
+                "/nice_backup",
+                "/nice_backup (create|start|stop|status|reload)[action: Action]",
+            ],
             "permissions": ["nice_backup.command.backup"],
         }
     }
@@ -58,18 +61,15 @@ class NiceBackup(Plugin):
         return super().__init__()
 
     def read_config(self) -> None:
-        self.save_default_config()
-
-        self.options.load(self.config)
-        self.logger.debug(f"Config loaded: {self.options.dump()}")
-
-        self.level_name: str = self.get_level_name()
-        self.world_path: str = self.options.worlds_path + "/" + self.level_name
-
-    def on_enable(self) -> None:
         try:
-            self.read_config()
-            self.is_ready: bool = True
+            self.save_default_config()
+            self.reload_config()
+
+            self.options.load(self.config)
+            self.logger.debug(f"Config loaded: {self.options.dump()}")
+
+            self.level_name: str = self.get_level_name()
+            self.world_path: str = self.options.worlds_path + "/" + self.level_name
 
             self.logger.info(f"World path: {self.world_path}")
             self.logger.info(f"Backup path: {self.options.output}")
@@ -77,27 +77,81 @@ class NiceBackup(Plugin):
             self.logger.info(
                 f"Compression: {'enabled' if self.options.compress else 'disabled'}"
             )
+
+            self.is_ready: bool = True
         except Exception as e:
             self.is_ready: bool = False
-            self.logger.error(f"Failed to enable plugin: {e}")
+            self.logger.error(f"Failed to read plugin configuration: {e}")
 
-        if self.is_ready and self.options.schedule != "":
+    def on_enable(self) -> None:
+        self.read_config()
+
+        if self.is_ready and self.options.enabled and self.options.schedule != "":
             self.start_schedule()
 
     def on_disable(self) -> None:
+        self.is_ready = False
         self.stop_schedule()
 
     def on_command(
         self, sender: CommandSender, command: Command, args: list[str]
     ) -> bool:
+        if not self.is_ready:
+            self.logger.error("Plugin is not ready. Command cannot be executed.")
+            return False
+
+        cmd = args[0].lower() if len(args) > 0 else "create"
+
         if command.name == "nice_backup":
-            return self.create_backup(sender)
+            if cmd == "create":
+                return self.create_backup(sender)
+            elif cmd == "start":
+                try:
+                    self.options.enabled = True
+                    self.options.save(self.config)
+                    self.save_config()
+                    self.start_schedule()
+                    return True
+                except Exception as e:
+                    self.logger.error(f"Failed to start scheduled backups: {e}")
+            elif cmd == "stop":
+                try:
+                    self.options.enabled = False
+                    self.options.save(self.config)
+                    self.save_config()
+                    self.stop_schedule()
+                    return True
+                except Exception as e:
+                    self.logger.error(f"Failed to stop scheduled backups: {e}")
+            elif cmd == "status":
+                message = (
+                    "enabled"
+                    if self.options.enabled and self.options.schedule != ""
+                    else "disabled"
+                )
+                self.logger.info(f"Scheduled backups are currently {message}.")
+                return True
+            elif cmd == "reload":
+                try:
+                    self.read_config()
+                    self.logger.info("Configuration reloaded successfully.")
+                    if self.options.enabled and self.options.schedule != "":
+                        self.start_schedule()
+                    else:
+                        self.stop_schedule()
+                    return True
+                except Exception as e:
+                    self.logger.error(f"Failed to reload configuration: {e}")
 
         return False
 
     def start_schedule(self) -> None:
         if self.options.schedule == "":
             self.logger.error("Backup schedule is disabled.")
+
+        if "schedule" in self.tasks:
+            self.logger.info("Backup schedule is already running.")
+            return
 
         try:
             croniter(self.options.schedule, datetime.datetime.now())
@@ -107,6 +161,7 @@ class NiceBackup(Plugin):
             )
             return
 
+        self.logger.info("Backup schedule started.")
         self.update_next_backup()
 
         def schedule_backup_task() -> None:
@@ -117,8 +172,8 @@ class NiceBackup(Plugin):
         self.run_task("schedule", schedule_backup_task, 0, int(self.server.current_tps))
 
     def stop_schedule(self) -> None:
-        self.logger.info("Stopping scheduled backups...")
         self.cancel_task("schedule")
+        self.logger.info("Backup schedule stopped.")
 
     def update_next_backup(self) -> None:
         if self.options.schedule != "":
@@ -171,7 +226,7 @@ class NiceBackup(Plugin):
         self.run_task(
             "get_status",
             get_status_task,
-            0,
+            int(self.server.current_tps),
             int(self.server.current_tps),
         )
 
@@ -202,7 +257,7 @@ class NiceBackup(Plugin):
             if output_path_tmp != output_path:
                 shutil.move(output_path_tmp, output_path)
 
-            self.logger.info(f"Backup saved: {output_path}")
+            self.logger.info(f"Saved backup: {output_path}")
         except Exception as e:
             if os.path.exists(output_path):
                 if os.path.isdir(output_path):

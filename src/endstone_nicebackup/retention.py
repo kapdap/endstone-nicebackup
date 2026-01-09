@@ -86,10 +86,10 @@ class RetentionManager:
                 try:
                     if os.path.isfile(file_path):
                         os.remove(file_path)
-                        logger.info(f"Deleted: {file_name}")
+                        logger.info(f"Deleted backup: {file_name}")
                     elif os.path.isdir(file_path):
                         shutil.rmtree(file_path)
-                        logger.info(f"Deleted: {file_name}")
+                        logger.info(f"Deleted backup: {file_name}")
                 except OSError as e:
                     logger.error(f"Failed to delete backup {file_name}: {e}")
 

@@ -109,10 +109,10 @@ For larger worlds, backups may take longer than the default timeout period (60 s
 
 ## TODO
 
-- Check for sufficient disk space before starting a backup.
-- Notify players in-game when a backup has started/completed with a configurable message.
-- Add command to reload configuration without restarting the server.
-- Add command to stop/start scheduled backups.
+- Option to notify players in-game when a backup has started/completed with a configurable message.
+- Send status messages to the in-game console for the op that triggers commands.
+- Improve configuration saving and loading.
+- Use Pathlib for file path manipulations.
 
 ## Ideas
 
